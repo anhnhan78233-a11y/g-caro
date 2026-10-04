@@ -1,0 +1,230 @@
+import tkinter as tk
+from tkinter import messagebox
+
+BOARD_SIZE = 15  # Bàn cờ 15x15
+CELL_SIZE = 40   # Kích thước mỗi ô vuông (pixel)
+
+class CaroGame:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Game Caro")
+        self.root.resizable(False, False)
+
+        self.current_player = "X"
+        self.mode = "pvp"  # Mặc định: 'pvp' (Người vs Người) hoặc 'pve' (Người vs Máy)
+        self.game_over = False
+        self.board = [["" for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
+
+        self.setup_ui()
+
+    def setup_ui(self):
+        # Khung điều khiển phía trên
+        control_frame = tk.Frame(self.root, bg="#f0f0f0", py=10)
+        control_frame.pack(fill=tk.X)
+
+        self.info_label = tk.Label(
+            control_frame, 
+            text="Lượt chơi: X", 
+            font=("Arial", 14, "bold"), 
+            bg="#f0f0f0"
+        )
+        self.info_label.pack(side=tk.LEFT, padx=20)
+
+        # Dropdown chọn chế độ chơi
+        self.mode_var = tk.StringVar(value="pvp")
+        mode_menu = tk.OptionMenu(
+            control_frame, 
+            self.mode_var, 
+            "pvp", "pve", 
+            command=self.change_mode
+        )
+        mode_menu.config(font=("Arial", 11))
+        mode_menu.pack(side=tk.RIGHT, padx=10)
+
+        tk.Label(
+            control_frame, 
+            text="Chế độ:", 
+            font=("Arial", 11), 
+            bg="#f0f0f0"
+        ).pack(side=tk.RIGHT)
+
+        btn_restart = tk.Button(
+            control_frame, 
+            text="Chơi mới", 
+            font=("Arial", 11, "bold"), 
+            bg="#4CAF50", 
+            fg="white", 
+            command=self.reset_game
+        )
+        btn_restart.pack(side=tk.RIGHT, padx=20)
+
+        # Bàn cờ Canvas
+        canvas_width = BOARD_SIZE * CELL_SIZE
+        canvas_height = BOARD_SIZE * CELL_SIZE
+        self.canvas = tk.Canvas(
+            self.root, 
+            width=canvas_width, 
+            height=canvas_height, 
+            bg="#EEDC82"
+        )
+        self.canvas.pack()
+
+        self.draw_board()
+        self.canvas.bind("<Button-1>", self.on_click)
+
+    def draw_board(self):
+        """Vẽ lưới bàn cờ"""
+        for i in range(BOARD_SIZE):
+            # Đường dọc
+            self.canvas.create_line(
+                i * CELL_SIZE + CELL_SIZE // 2, CELL_SIZE // 2,
+                i * CELL_SIZE + CELL_SIZE // 2, BOARD_SIZE * CELL_SIZE - CELL_SIZE // 2,
+                fill="#8B4513", width=1.5
+            )
+            # Đường ngang
+            self.canvas.create_line(
+                CELL_SIZE // 2, i * CELL_SIZE + CELL_SIZE // 2,
+                BOARD_SIZE * CELL_SIZE - CELL_SIZE // 2, i * CELL_SIZE + CELL_SIZE // 2,
+                fill="#8B4513", width=1.5
+            )
+
+    def change_mode(self, value):
+        self.mode = value
+        self.reset_game()
+
+    def reset_game(self):
+        """Khởi động lại ván đấu"""
+        self.board = [["" for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
+        self.current_player = "X"
+        self.game_over = False
+        self.canvas.delete("all")
+        self.draw_board()
+        self.info_label.config(text="Lượt chơi: X")
+
+    def on_click(self, event):
+        if self.game_over:
+            return
+
+        # Tính tọa độ dòng/cột dựa vào điểm nhấp chuột
+        col = round((event.x - CELL_SIZE // 2) / CELL_SIZE)
+        row = round((event.y - CELL_SIZE // 2) / CELL_SIZE)
+
+        if 0 <= row < BOARD_SIZE and 0 <= col < BOARD_SIZE and self.board[row][col] == "":
+            self.make_move(row, col)
+
+            # Lượt của Máy (AI) nếu chọn chế độ Chơi với Máy
+            if not self.game_over and self.mode == "pve" and self.current_player == "O":
+                self.root.after(300, self.ai_move)
+
+    def make_move(self, row, col):
+        """Đặt quân cờ vào vị trí và kiểm tra thắng/thua"""
+        self.board[row][col] = self.current_player
+        self.draw_piece(row, col, self.current_player)
+
+        if self.check_win(row, col, self.current_player):
+            self.game_over = True
+            messagebox.showinfo("Kết quả", f"Người chơi {self.current_player} đã chiến thắng!")
+            return
+
+        if self.is_full():
+            self.game_over = True
+            messagebox.showinfo("Kết quả", "Hòa nhau!")
+            return
+
+        # Đổi lượt chơi
+        self.current_player = "O" if self.current_player == "X" else "X"
+        self.info_label.config(text=f"Lượt chơi: {self.current_player}")
+
+    def draw_piece(self, row, col, player):
+        """Vẽ quân X hoặc O lên bàn cờ"""
+        x = col * CELL_SIZE + CELL_SIZE // 2
+        y = row * CELL_SIZE + CELL_SIZE // 2
+        offset = CELL_SIZE // 3
+
+        if player == "X":
+            self.canvas.create_line(
+                x - offset, y - offset, x + offset, y + offset, 
+                fill="#D32F2F", width=3
+            )
+            self.canvas.create_line(
+                x + offset, y - offset, x - offset, y + offset, 
+                fill="#D32F2F", width=3
+            )
+        else:
+            self.canvas.create_oval(
+                x - offset, y - offset, x + offset, y + offset, 
+                outline="#1976D2", width=3
+            )
+
+    def check_win(self, r, c, player):
+        """Kiểm tra điều kiện thắng (5 quân liên tiếp)"""
+        directions = [(0, 1), (1, 0), (1, 1), (1, -1)]
+
+        for dr, dc in directions:
+            count = 1
+            # Đếm theo chiều thuận
+            nr, nc = r + dr, c + dc
+            while 0 <= nr < BOARD_SIZE and 0 <= nc < BOARD_SIZE and self.board[nr][nc] == player:
+                count += 1
+                nr += dr
+                nc += dc
+
+            # Đếm theo chiều ngược
+            nr, nc = r - dr, c - dc
+            while 0 <= nr < BOARD_SIZE and 0 <= nc < BOARD_SIZE and self.board[nr][nc] == player:
+                count += 1
+                nr -= dr
+                nc -= dc
+
+            if count >= 5:
+                return True
+        return False
+
+    def is_full(self):
+        """Kiểm tra bàn cờ đã đầy chưa"""
+        return all(self.board[r][c] != "" for r in range(BOARD_SIZE) for c in range(BOARD_SIZE))
+
+    def ai_move(self):
+        """Chiến thuật cơ bản cho AI: Tấn công hoặc chặn lượt đi của đối thủ"""
+        # 1. Kiểm tra xem AI có thể thắng ngay trong lượt này không
+        for r in range(BOARD_SIZE):
+            for c in range(BOARD_SIZE):
+                if self.board[r][c] == "":
+                    self.board[r][c] = "O"
+                    if self.check_win(r, c, "O"):
+                        self.board[r][c] = ""
+                        self.make_move(r, c)
+                        return
+                    self.board[r][c] = ""
+
+        # 2. Kiểm tra để chặn thắng của Người chơi (X)
+        for r in range(BOARD_SIZE):
+            for c in range(BOARD_SIZE):
+                if self.board[r][c] == "":
+                    self.board[r][c] = "X"
+                    if self.check_win(r, c, "X"):
+                        self.board[r][c] = ""
+                        self.make_move(r, c)
+                        return
+                    self.board[r][c] = ""
+
+        # 3. Ưu tiên đánh vào ô trống cạnh các ô đã có nước đi
+        for r in range(BOARD_SIZE):
+            for c in range(BOARD_SIZE):
+                if self.board[r][c] == "":
+                    for dr in [-1, 0, 1]:
+                        for dc in [-1, 0, 1]:
+                            nr, nc = r + dr, c + dc
+                            if 0 <= nr < BOARD_SIZE and 0 <= nc < BOARD_SIZE and self.board[nr][nc] != "":
+                                self.make_move(r, c)
+                                return
+
+        # 4. Đánh ô tâm nếu bàn cờ còn trống
+        center = BOARD_SIZE // 2
+        if self.board[center][center] == "":
+            self.make_move(center, center)
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    game = CaroGame(root)
+    root.mainloop()
